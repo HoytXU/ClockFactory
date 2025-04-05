@@ -1,28 +1,32 @@
 import bpy
 import numpy as np
-from numpy.random import randint as RI
-from numpy.random import uniform
-from numpy.random import uniform as U
+import math
+from numpy.random import randint as RI, uniform, uniform as U
 
 from infinigen.assets.material_assignments import AssetList
-from infinigen.assets.materials import (
-    glass_shader_list,
-)
+from infinigen.assets.materials import glass_shader_list, glass, metal, wood
+from infinigen.assets.materials.common import unique_surface
 from infinigen.assets.utils.autobevel import BevelSharp
-from infinigen.assets.utils.object import get_joint_name
+from infinigen.assets.utils.decorate import mirror, read_co, write_attribute, write_co
+from infinigen.assets.utils.draw import spin
+from infinigen.assets.utils.nodegroup import geo_radius
+from infinigen.assets.utils.object import (
+    data2mesh, join_objects, mesh2obj, new_cube, new_line,
+    save_objects, save_parts_join_objects, save_obj_parts_add,
+    join_objects_save_whole, get_joint_name, add_joint
+)
 from infinigen.core import surface
-from infinigen.core.nodes import node_utils
-from infinigen.core.nodes.node_wrangler import Nodes, NodeWrangler
+from infinigen.core.constraints.example_solver.room import constants
 from infinigen.core.placement.factory import AssetFactory
 from infinigen.core.util import blender as butil
+from infinigen.core.util.bevelling import add_bevel, get_bevel_edges
 from infinigen.core.util.blender import deep_clone_obj
 from infinigen.core.util.math import FixedSeed, clip_gaussian
-
+from infinigen.core.util.random import log_uniform
+from infinigen.core.nodes import node_utils
+from infinigen.core.nodes.node_wrangler import Nodes, NodeWrangler
 from infinigen.core.nodes.node_utils import save_geometry_new, save_geometry
-import copy
 
-from infinigen.core.placement.factory import AssetFactory
-from infinigen.core.util.math import FixedSeed
 
 
 class ClockFactory(AssetFactory):
@@ -36,38 +40,95 @@ class ClockFactory(AssetFactory):
     def sample_parameters():
         return {
         }
-
     def create_asset(self, **params):
         obj_params = self.sample_parameters()
         self.params.update(obj_params)
         params = self.params
 
-        obj = butil.spawn_cube()
+        ## add clock_pan 
+        clock = butil.spawn_cube()
         butil.modify_mesh(
-            obj,
+            clock,
             "NODES",
             node_group=node_clock_pan(),
             ng_inputs=self.params,
             apply=True,
         )
 
-
-        names = ["clock_pan", "hour_hand", "minute_hand", "clock_ring"]
         first = True
         parent_id = "world"
-        joint_info = {
-            "name": get_joint_name("revolute"),
-            "type": "revolute",
-            "axis": [0, 0, 1],
-            "limit":{
-                "lower": -np.pi / 2,
-                "upper": np.pi / 2,
-            },   
-        }
 
-        save_geometry_new(obj, 'whole', 0, params.get("i", None), params.get("path", None), parent_obj_id="world", first=True, use_bpy=True)
-        
-        return obj
+        pan_id = save_obj_parts_add([clock], self.params.get("path", None), self.params.get("i", None), "clock_pan", first=first, use_bpy=True, parent_obj_id="world", joint_info={
+                "name": get_joint_name("fixed"),
+                "type": "fixed",
+            })[0]
+        first = False
+
+        ## add clock_ring
+        bpy.ops.mesh.primitive_torus_add(align="WORLD", location=(0,0,0), rotation=(0,0,0), major_radius=0.9, minor_radius=0.1, abso_major_rad=0.75)
+        clock_ring = bpy.context.active_object
+        save_obj_parts_add([clock_ring], self.params.get("path", None), self.params.get("i", None), "clock_ring", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
+                "name": get_joint_name("fixed"),
+                "type": "fixed"
+            })
+
+
+        ## add center node
+        bpy.ops.mesh.primitive_cylinder_add(align="WORLD", depth=0.2, radius=0.08)
+        center_node = bpy.context.active_object
+        save_obj_parts_add([center_node], self.params.get("path", None), self.params.get("i", None), "center_node", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
+                "name": get_joint_name("fixed"),
+                "type": "fixed"
+            })
+
+
+        ## add hour_hand
+        hour_hand = butil.spawn_cube()
+        butil.modify_mesh(
+            hour_hand,
+            "NODES",
+            node_group=node_hour_hand(),
+            ng_inputs=self.params,
+            apply=True,
+        )
+
+        save_obj_parts_add([hour_hand], self.params.get("path", None), self.params.get("i", None), "hour_hand", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
+                "name": get_joint_name("revolute"),
+                "type": "revolute",
+                "axis": (0, 0, 1),
+                "limit":{
+                    "lower": -math.pi,
+                    "upper": math.pi
+                },
+                "origin_shift": (0, 0, 0)
+            })
+
+        ## add minute_hand
+        minute_hand = butil.spawn_cube()
+        butil.modify_mesh(
+            minute_hand,
+            "NODES",
+            node_group=node_minute_hand(),
+            ng_inputs=self.params,
+            apply=True,
+        )
+
+        save_obj_parts_add([minute_hand], self.params.get("path", None), self.params.get("i", None), "minute_hand", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
+                "name": get_joint_name("revolute"),
+                "type": "revolute",
+                "limit":{
+                    "lower": -math.pi,
+                    "upper": math.pi
+                },
+                "axis": (0, 0, 1),
+                "origin_shift": (0, 0, 0)
+            })
+
+
+        ## save all
+        save_geometry_new(clock, 'whole', 0, params.get("i", None), params.get("path", None), parent_obj_id="world", first=True, use_bpy=True)
+
+        return clock
 
 def shader_material(nw: NodeWrangler):
     # Code generated using version 2.6.5 of the node_transpiler
@@ -88,7 +149,7 @@ def node_clock_pan(nw: NodeWrangler):
     group_input = nw.new_node(Nodes.GroupInput, expose_input=[('NodeSocketGeometry', 'Geometry', None)])
     
     transform_geometry_1 = nw.new_node(Nodes.Transform,
-        input_kwargs={'Geometry': group_input.outputs["Geometry"], 'Translation': (0.7000, 0.0000, 0.0300), 'Scale': (0.0600, 0.0100, 0.0100)})
+        input_kwargs={'Geometry': group_input.outputs["Geometry"], 'Translation': (0.7000, 0.0000, 0.0200), 'Scale': (0.0600, 0.0100, 0.0100)})
     
     transform_geometry_2 = nw.new_node(Nodes.Transform, input_kwargs={'Geometry': transform_geometry_1, 'Rotation': (0.0000, 0.0000, 0.5236)})
     
@@ -119,6 +180,7 @@ def node_clock_pan(nw: NodeWrangler):
     
     group_output = nw.new_node(Nodes.GroupOutput, input_kwargs={'Geometry': join_geometry}, attrs={'is_active_output': True})
 
+
 @node_utils.to_nodegroup(
     "node_hour_hand", singleton=True, type="GeometryNodeTree"
 )
@@ -131,8 +193,10 @@ def node_hour_hand(nw: NodeWrangler):
     
     instance_on_points = nw.new_node(Nodes.InstanceOnPoints, input_kwargs={'Points': mesh_line, 'Instance': cylinder_1.outputs["Mesh"]})
     
+    realize_instances = nw.new_node(Nodes.RealizeInstances, input_kwargs={'Geometry': instance_on_points})
+    
     transform_geometry = nw.new_node(Nodes.Transform,
-        input_kwargs={'Geometry': instance_on_points, 'Translation': (0.0000, 2.0000, 0.0000), 'Rotation': (1.5708, 0.0000, 0.0000), 'Scale': (0.5000, 0.5000, 2.0000)})
+        input_kwargs={'Geometry': realize_instances, 'Translation': (0.0000, 2.0000, 0.0000), 'Rotation': (1.5708, 0.0000, 0.0000), 'Scale': (0.5000, 0.5000, 2.0000)})
     
     cone = nw.new_node('GeometryNodeMeshCone')
     
@@ -140,14 +204,14 @@ def node_hour_hand(nw: NodeWrangler):
     
     join_geometry_1 = nw.new_node(Nodes.JoinGeometry, input_kwargs={'Geometry': [transform_geometry, transform_geometry_13]})
     
-    combine_xyz = nw.new_node(Nodes.CombineXYZ)
-    
     transform_geometry_14 = nw.new_node(Nodes.Transform,
-        input_kwargs={'Geometry': join_geometry_1, 'Translation': (0.0000, -0.4000, 0.0500), 'Rotation': combine_xyz, 'Scale': (0.0500, 0.1000, 0.0500)})
+        input_kwargs={'Geometry': join_geometry_1, 'Translation': (0.0000, -0.4000, 0.0500), 'Scale': (0.0500, 0.0800, 0.0500)})
     
-    join_geometry = nw.new_node(Nodes.JoinGeometry, input_kwargs={'Geometry': transform_geometry_14})
+    transform_geometry_1 = nw.new_node(Nodes.Transform,
+        input_kwargs={'Geometry': transform_geometry_14, 'Rotation': (0.0000, 0.0000, 7.3566)})
     
-    group_output_2 = nw.new_node(Nodes.GroupOutput, input_kwargs={'Geometry': join_geometry}, attrs={'is_active_output': True})
+    group_output_1 = nw.new_node(Nodes.GroupOutput, input_kwargs={'Geometry': transform_geometry_1}, attrs={'is_active_output': True})
+
 
 @node_utils.to_nodegroup(
     "node_minute_hand", singleton=True, type="GeometryNodeTree"
@@ -161,8 +225,10 @@ def node_minute_hand(nw: NodeWrangler):
     
     instance_on_points = nw.new_node(Nodes.InstanceOnPoints, input_kwargs={'Points': mesh_line, 'Instance': cylinder_1.outputs["Mesh"]})
     
+    realize_instances = nw.new_node(Nodes.RealizeInstances, input_kwargs={'Geometry': instance_on_points})
+    
     transform_geometry = nw.new_node(Nodes.Transform,
-        input_kwargs={'Geometry': instance_on_points, 'Translation': (0.0000, 2.0000, 0.0000), 'Rotation': (1.5708, 0.0000, 0.0000), 'Scale': (0.5000, 0.5000, 2.0000)})
+        input_kwargs={'Geometry': realize_instances, 'Translation': (0.0000, 2.0000, 0.0000), 'Rotation': (1.5708, 0.0000, 0.0000), 'Scale': (0.5000, 0.5000, 2.0000)})
     
     cone = nw.new_node('GeometryNodeMeshCone')
     
@@ -170,18 +236,10 @@ def node_minute_hand(nw: NodeWrangler):
     
     join_geometry_1 = nw.new_node(Nodes.JoinGeometry, input_kwargs={'Geometry': [transform_geometry, transform_geometry_13]})
     
-    combine_xyz = nw.new_node(Nodes.CombineXYZ)
-    
     transform_geometry_14 = nw.new_node(Nodes.Transform,
-        input_kwargs={'Geometry': join_geometry_1, 'Translation': (0.0000, -0.4000, 0.0500), 'Rotation': combine_xyz, 'Scale': (0.0500, 0.1000, 0.0500)})
-    
-    combine_xyz_1 = nw.new_node(Nodes.CombineXYZ, input_kwargs={'Z': -4.1000})
+        input_kwargs={'Geometry': join_geometry_1, 'Translation': (0.0000, -0.4000, 0.0500), 'Scale': (0.0500, 0.1000, 0.0500)})
     
     transform_geometry_15 = nw.new_node(Nodes.Transform,
-        input_kwargs={'Geometry': transform_geometry_14, 'Rotation': combine_xyz_1, 'Scale': (1.0000, 1.3000, 1.0000)})
+        input_kwargs={'Geometry': transform_geometry_14, 'Rotation': (0.0000, 0.0000, -0.3159), 'Scale': (1.0000, 1.3000, 1.0000)})
     
-    join_geometry = nw.new_node(Nodes.JoinGeometry, input_kwargs={'Geometry': transform_geometry_15})
-    
-    group_output_1 = nw.new_node(Nodes.GroupOutput, input_kwargs={'Geometry': join_geometry}, attrs={'is_active_output': True})
-
-
+    group_output_2 = nw.new_node(Nodes.GroupOutput, input_kwargs={'Geometry': transform_geometry_15}, attrs={'is_active_output': True})
