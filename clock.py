@@ -97,10 +97,10 @@ class ClockFactory(AssetFactory):
                 "type": "revolute",
                 "axis": (0, 0, 1),
                 "limit":{
-                    "lower": -math.pi,
-                    "upper": math.pi
+                    "lower": -10*math.pi,
+                    "upper": 10*math.pi
                 },
-                "origin_shift": (0, 0, 0)
+                "origin_shift": (0, 0.3, 0)
             })
 
         ## add minute_hand
@@ -117,11 +117,11 @@ class ClockFactory(AssetFactory):
                 "name": get_joint_name("revolute"),
                 "type": "revolute",
                 "limit":{
-                    "lower": -math.pi,
-                    "upper": math.pi
+                    "lower": -10*math.pi,
+                    "upper": 10*math.pi
                 },
                 "axis": (0, 0, 1),
-                "origin_shift": (0, 0, 0)
+                "origin_shift": (0, 0.4, 0)
             })
 
 
@@ -208,7 +208,7 @@ def node_hour_hand(nw: NodeWrangler):
         input_kwargs={'Geometry': join_geometry_1, 'Translation': (0.0000, -0.4000, 0.0500), 'Scale': (0.0500, 0.0800, 0.0500)})
     
     transform_geometry_1 = nw.new_node(Nodes.Transform,
-        input_kwargs={'Geometry': transform_geometry_14, 'Rotation': (0.0000, 0.0000, 7.3566)})
+        input_kwargs={'Geometry': transform_geometry_14, 'Rotation': (0.0000, 0.0000, 0.0000)})
     
     group_output_1 = nw.new_node(Nodes.GroupOutput, input_kwargs={'Geometry': transform_geometry_1}, attrs={'is_active_output': True})
 
@@ -240,6 +240,6 @@ def node_minute_hand(nw: NodeWrangler):
         input_kwargs={'Geometry': join_geometry_1, 'Translation': (0.0000, -0.4000, 0.0500), 'Scale': (0.0500, 0.1000, 0.0500)})
     
     transform_geometry_15 = nw.new_node(Nodes.Transform,
-        input_kwargs={'Geometry': transform_geometry_14, 'Rotation': (0.0000, 0.0000, -0.3159), 'Scale': (1.0000, 1.3000, 1.0000)})
+        input_kwargs={'Geometry': transform_geometry_14, 'Rotation': (0.0000, 0.0000, 0.0000), 'Scale': (1.0000, 1.3000, 1.0000)})
     
     group_output_2 = nw.new_node(Nodes.GroupOutput, input_kwargs={'Geometry': transform_geometry_15}, attrs={'is_active_output': True})
