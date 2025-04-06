@@ -45,6 +45,8 @@ class ClockFactory(AssetFactory):
         self.params.update(obj_params)
         params = self.params
 
+        materials = [glass, metal, wood]
+
         ## add clock_pan 
         clock = butil.spawn_cube()
         butil.modify_mesh(
@@ -54,7 +56,8 @@ class ClockFactory(AssetFactory):
             ng_inputs=self.params,
             apply=True,
         )
-
+        clock_material = np.random.choice(materials)
+        clock_material.apply(clock)
         first = True
         parent_id = "world"
 
@@ -65,8 +68,13 @@ class ClockFactory(AssetFactory):
         first = False
 
         ## add clock_ring
-        bpy.ops.mesh.primitive_torus_add(align="WORLD", location=(0,0,0), rotation=(0,0,0), major_radius=0.9, minor_radius=0.1, abso_major_rad=0.75)
+        major_segments = np.random.choice([6,8,16,32])
+        minor_segments = np.random.choice([3,6,8,32])
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.ops.mesh.primitive_torus_add(align="WORLD", location=(0,0,0), rotation=(0,0,0), major_radius=0.9, minor_radius=0.1, abso_major_rad=0.75, major_segments=major_segments, minor_segments=minor_segments)
         clock_ring = bpy.context.active_object
+        clock_material = np.random.choice(materials)
+        clock_material.apply(clock_ring)
         save_obj_parts_add([clock_ring], self.params.get("path", None), self.params.get("i", None), "clock_ring", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
                 "name": get_joint_name("fixed"),
                 "type": "fixed"
@@ -74,55 +82,94 @@ class ClockFactory(AssetFactory):
 
 
         ## add center node
+        bpy.ops.object.select_all(action='DESELECT')
         bpy.ops.mesh.primitive_cylinder_add(align="WORLD", depth=0.2, radius=0.08)
         center_node = bpy.context.active_object
+        clock_material = np.random.choice(materials)
+        clock_material.apply(center_node)
         save_obj_parts_add([center_node], self.params.get("path", None), self.params.get("i", None), "center_node", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
                 "name": get_joint_name("fixed"),
                 "type": "fixed"
             })
 
 
+        hand_type = np.random.choice(["rectangle_cube", "arrow"])
+        
         ## add hour_hand
-        hour_hand = butil.spawn_cube()
-        butil.modify_mesh(
-            hour_hand,
-            "NODES",
-            node_group=node_hour_hand(),
-            ng_inputs=self.params,
-            apply=True,
-        )
-
-        save_obj_parts_add([hour_hand], self.params.get("path", None), self.params.get("i", None), "hour_hand", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
-                "name": get_joint_name("revolute"),
-                "type": "revolute",
-                "axis": (0, 0, 1),
-                "limit":{
-                    "lower": -10*math.pi,
-                    "upper": 10*math.pi
-                },
-                "origin_shift": (0, 0.3, 0)
-            })
+        if(hand_type == "arrow"):
+            hour_hand = butil.spawn_cube()
+            butil.modify_mesh(
+                hour_hand,
+                "NODES",
+                node_group=node_hour_hand(),
+                ng_inputs=self.params,
+                apply=True,
+            )
+            clock_material = np.random.choice(materials)
+            clock_material.apply(hour_hand)
+            save_obj_parts_add([hour_hand], self.params.get("path", None), self.params.get("i", None), "hour_hand", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
+                    "name": get_joint_name("revolute"),
+                    "type": "revolute",
+                    "axis": (0, 0, 1),
+                    "limit":{
+                        "lower": -10*math.pi,
+                        "upper": 10*math.pi
+                    },
+                    "origin_shift": (0, 0.3, 0)
+                })
+        elif(hand_type == "rectangle_cube"):
+            bpy.ops.object.select_all(action='DESELECT')
+            bpy.ops.mesh.primitive_cube_add(size=1, enter_editmode=False, align="WORLD", location=(0, -0.2, 0.05), scale=(0.05, 0.4, 0.03)) 
+            hour_hand = bpy.context.active_object
+            clock_material = np.random.choice(materials)
+            clock_material.apply(hour_hand)
+            save_obj_parts_add([hour_hand], self.params.get("path", None), self.params.get("i", None), "hour_hand", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
+                    "name": get_joint_name("revolute"),
+                    "type": "revolute",
+                    "axis": (0, 0, 1),
+                    "limit":{
+                        "lower": -10*math.pi,
+                        "upper": 10*math.pi
+                    },
+                    "origin_shift": (0, 0.2, 0)
+                })
 
         ## add minute_hand
-        minute_hand = butil.spawn_cube()
-        butil.modify_mesh(
-            minute_hand,
-            "NODES",
-            node_group=node_minute_hand(),
-            ng_inputs=self.params,
-            apply=True,
-        )
-
-        save_obj_parts_add([minute_hand], self.params.get("path", None), self.params.get("i", None), "minute_hand", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
-                "name": get_joint_name("revolute"),
-                "type": "revolute",
-                "limit":{
-                    "lower": -10*math.pi,
-                    "upper": 10*math.pi
-                },
-                "axis": (0, 0, 1),
-                "origin_shift": (0, 0.4, 0)
-            })
+        if(hand_type == "arrow"):
+            minute_hand = butil.spawn_cube()
+            butil.modify_mesh(
+                minute_hand,
+                "NODES",
+                node_group=node_minute_hand(),
+                ng_inputs=self.params,
+                apply=True,
+            )
+            clock_material.apply(minute_hand)
+            save_obj_parts_add([minute_hand], self.params.get("path", None), self.params.get("i", None), "minute_hand", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
+                    "name": get_joint_name("revolute"),
+                    "type": "revolute",
+                    "limit":{
+                        "lower": -10*math.pi,
+                        "upper": 10*math.pi
+                    },
+                    "axis": (0, 0, 1),
+                    "origin_shift": (0, 0.4, 0)
+                })
+        elif(hand_type == "rectangle_cube"):
+            bpy.ops.object.select_all(action='DESELECT')
+            bpy.ops.mesh.primitive_cube_add(size=1, enter_editmode=False, align="WORLD", location=(0, -0.3, 0.05), scale=(0.05, 0.6, 0.03)) 
+            minute_hand = bpy.context.active_object
+            clock_material.apply(minute_hand)
+            save_obj_parts_add([minute_hand], self.params.get("path", None), self.params.get("i", None), "minute_hand", first=first, use_bpy=True, parent_obj_id=pan_id, joint_info={
+                    "name": get_joint_name("revolute"),
+                    "type": "revolute",
+                    "axis": (0, 0, 1),
+                    "limit":{
+                        "lower": -10*math.pi,
+                        "upper": 10*math.pi
+                    },
+                    "origin_shift": (0, 0.3, 0)
+                })
 
 
         ## save all
