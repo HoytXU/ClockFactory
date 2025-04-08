@@ -34,7 +34,7 @@ class ClockFactory(AssetFactory):
         super().__init__(factory_seed)
 
         with FixedSeed(factory_seed):
-            self.params = self.sample_parameters()
+            self.params = {}
 
     @staticmethod
     def sample_parameters():
@@ -43,8 +43,8 @@ class ClockFactory(AssetFactory):
     def create_asset(self, **params):
         obj_params = self.sample_parameters()
         self.params.update(obj_params)
-        params = self.params
-
+        self.params.update(params)
+   
         materials = [glass, metal, wood]
 
         ## add clock_pan 
@@ -53,7 +53,7 @@ class ClockFactory(AssetFactory):
             clock,
             "NODES",
             node_group=node_clock_pan(),
-            ng_inputs=self.params,
+            # ng_inputs=self.params,
             apply=True,
         )
         clock_material = np.random.choice(materials)
@@ -102,7 +102,7 @@ class ClockFactory(AssetFactory):
                 hour_hand,
                 "NODES",
                 node_group=node_hour_hand(),
-                ng_inputs=self.params,
+                # ng_inputs=self.params,
                 apply=True,
             )
             clock_material = np.random.choice(materials)
@@ -141,7 +141,7 @@ class ClockFactory(AssetFactory):
                 minute_hand,
                 "NODES",
                 node_group=node_minute_hand(),
-                ng_inputs=self.params,
+                # ng_inputs=self.params,
                 apply=True,
             )
             clock_material.apply(minute_hand)
@@ -173,7 +173,7 @@ class ClockFactory(AssetFactory):
 
 
         ## save all
-        save_geometry_new(clock, 'whole', 0, params.get("i", None), params.get("path", None), parent_obj_id="world", first=True, use_bpy=True)
+        save_geometry_new(clock, 'whole', 0, self.params.get("i", None), self.params.get("path", None), parent_obj_id="world", first=True, use_bpy=True)
 
         return clock
 
